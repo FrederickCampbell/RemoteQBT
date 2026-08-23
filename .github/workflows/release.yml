@@ -1,0 +1,125 @@
+name: Build Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing qbt-X.Y.Z-rN tag to build and publish
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: remoteqbt-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Resolve immutable release state
+        id: existing
+        shell: pwsh
+        run: |
+          $tag = '${{ inputs.tag }}'
+          if ($tag -notmatch '^qbt-\d+\.\d+\.\d+-r\d+$') {
+            throw "Release tag must use qbt-X.Y.Z-rN: $tag"
+          }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+
+          $releaseId = gh api "repos/$env:GITHUB_REPOSITORY/releases" `
+            --paginate `
+            --jq ".[] | select(.tag_name == `"$tag`") | .id" |
+            Select-Object -First 1
+
+          if ([string]::IsNullOrWhiteSpace([string]$releaseId)) {
+            "already_published=false" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+
+          $release = gh api "repos/$env:GITHUB_REPOSITORY/releases/$releaseId" | ConvertFrom-Json
+          $names = @(gh api "repos/$env:GITHUB_REPOSITORY/releases/$releaseId/assets" `
+            --paginate --jq '.[].name')
+
+          $zipName = "RemoteQBT-$tag-Windows.zip"
+          $shaName = "$zipName.sha256"
+          $complete = ($names -contains $zipName) -and ($names -contains $shaName)
+
+          if ($release.draft) {
+            Write-Host "Removing incomplete draft release $tag so it can be rebuilt cleanly."
+            gh api -X DELETE "repos/$env:GITHUB_REPOSITORY/releases/$releaseId"
+            "already_published=false" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+
+          if (-not $complete) {
+            throw "Published release $tag is incomplete. Immutable published releases are never overwritten; create a new rN revision."
+          }
+
+          Write-Host "Release $tag is already complete and immutable. Nothing to replace."
+          "already_published=true" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/checkout@v7
+        if: steps.existing.outputs.already_published != 'true'
+        with:
+          ref: ${{ steps.existing.outputs.tag }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v7
+        if: steps.existing.outputs.already_published != 'true'
+        with:
+          python-version: '3.13'
+          cache: pip
+
+      - name: Validate source identity matches tag
+        if: steps.existing.outputs.already_published != 'true'
+        shell: pwsh
+        run: |
+          python scripts/release_identity.py check
+          $actual = (python -c "import rqbt.version as v; print(v.RELEASE_TAG)").Trim()
+          if ($actual -ne '${{ steps.existing.outputs.tag }}') {
+            throw "Source release tag $actual does not match requested tag ${{ steps.existing.outputs.tag }}"
+          }
+
+      - name: Build verified Windows package
+        if: steps.existing.outputs.already_published != 'true'
+        shell: pwsh
+        run: ./scripts/build_release.ps1 -ReleaseTag '${{ steps.existing.outputs.tag }}'
+
+      - name: Publish complete release atomically
+        if: steps.existing.outputs.already_published != 'true'
+        shell: pwsh
+        run: |
+          $tag = '${{ steps.existing.outputs.tag }}'
+          $qbt = (python -c "import rqbt.version as v; print(v.QBITTORRENT_VERSION)").Trim()
+          $rev = (python -c "import rqbt.version as v; print(v.REMOTEQBT_REVISION)").Trim()
+          $title = "RemoteQBT for qBittorrent $qbt (r$rev)"
+
+          gh release create $tag artifacts/* `
+            --draft `
+            --title $title `
+            --generate-notes `
+            --repo $env:GITHUB_REPOSITORY
+
+          $releaseId = gh api "repos/$env:GITHUB_REPOSITORY/releases" `
+            --paginate `
+            --jq ".[] | select(.tag_name == `"$tag`") | .id" |
+            Select-Object -First 1
+          if (-not $releaseId) {
+            throw "Draft release was not created."
+          }
+
+          $names = @(gh api "repos/$env:GITHUB_REPOSITORY/releases/$releaseId/assets" `
+            --paginate --jq '.[].name')
+          $zipName = "RemoteQBT-$tag-Windows.zip"
+          $shaName = "$zipName.sha256"
+          if (-not (($names -contains $zipName) -and ($names -contains $shaName))) {
+            throw "Draft release does not contain both required immutable assets."
+          }
+
+          gh release edit $tag --draft=false --latest --repo $env:GITHUB_REPOSITORY
+          Write-Host "Published immutable release $tag."

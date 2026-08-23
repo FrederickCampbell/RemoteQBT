@@ -1,0 +1,20 @@
+{
+  "name": "RemoteQBT",
+  "release_id": "5.2.3-r3",
+  "release_tag": "qbt-5.2.3-r3",
+  "qbittorrent_compatibility": {
+    "release": "5.2.3",
+    "upstream_tag": "release-5.2.3",
+    "webapi_version": "2.15.1"
+  },
+  "remoteqbt_revision": 3,
+  "target": "Windows / qBittorrent 5.2.3 compatibility baseline",
+  "validated": {
+    "python_syntax": true,
+    "private_api_key_embedded": false,
+    "private_tracker_url_embedded": false,
+    "package_mode": "PyInstaller windowed onedir EXE"
+  },
+  "github_repository": "FrederickCampbell/RemoteQBT",
+  "self_update": true
+}

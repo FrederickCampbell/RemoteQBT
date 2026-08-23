@@ -1,0 +1,25 @@
+# Python / Qt build outputs
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+build/
+dist/
+*.spec
+
+# Local app state / secrets
+config.json
+update-state.json
+*.log
+.env
+.env.*
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Release staging
+artifacts/
+release-stage/

@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+          cache: pip
+      - name: Validate qBittorrent-aligned release identity
+        shell: pwsh
+        run: python scripts/release_identity.py check
+      - name: Syntax + unit tests
+        shell: pwsh
+        run: |
+          python -m compileall -q remoteqbt.py rqbt scripts tests
+          python -m unittest discover -s tests -v
+          $null = [scriptblock]::Create((Get-Content .\Update-RemoteQBT.ps1 -Raw))
+      - name: Build Windows application
+        shell: pwsh
+        run: ./scripts/build_release.ps1
+      - name: Smoke-test self-updater
+        shell: pwsh
+        run: |
+          $testRoot = Join-Path $env:RUNNER_TEMP 'RemoteQBT-Updater-Smoke'
+          $stateRoot = Join-Path $env:RUNNER_TEMP 'RemoteQBT-Updater-State'
+          $configRoot = Join-Path $env:RUNNER_TEMP 'RemoteQBT-Updater-Config'
+          Remove-Item $testRoot,$stateRoot,$configRoot -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $testRoot -Force | Out-Null
+          Set-Content -LiteralPath (Join-Path $testRoot 'old-install-sentinel.txt') -Value 'old'
+          $shell = (Get-Command pwsh.exe -ErrorAction SilentlyContinue).Source
+          if (-not $shell) { $shell = (Get-Command powershell.exe -ErrorAction Stop).Source }
+          & $shell -NoProfile -ExecutionPolicy Bypass -File .\Update-RemoteQBT.ps1 `
+            -PackageRoot .\release-stage `
+            -InstallRoot $testRoot `
+            -StateDir $stateRoot `
+            -ConfigDir $configRoot `
+            -SkipAssociations `
+            -SkipProcessShutdown `
+            -Quiet
+          $updaterExit = $LASTEXITCODE
+          if ($updaterExit -ne 0) { throw "Self-updater smoke test failed with exit code $updaterExit" }
+          $expected = (python -c "import rqbt.version as v; print(v.RELEASE_ID)").Trim()
+          $marker = Join-Path $testRoot 'RELEASE-ID.txt'
+          if (-not (Test-Path -LiteralPath $marker)) { throw 'Updater did not install RELEASE-ID.txt.' }
+          $actual = (Get-Content -LiteralPath $marker -Raw).Trim()
+          if ($actual -ne $expected) { throw "Updater installed identity $actual; expected $expected" }
+          if (-not (Test-Path -LiteralPath (Join-Path $testRoot 'RemoteQBT.exe'))) { throw 'Updater did not install RemoteQBT.exe.' }
+          if (Test-Path (Join-Path $testRoot 'old-install-sentinel.txt')) { throw 'Old installation sentinel survived replacement.' }
+      - name: Upload Windows smoke-build
+        uses: actions/upload-artifact@v7
+        with:
+          name: RemoteQBT-Windows
+          path: artifacts/*
+          if-no-files-found: error
