@@ -1,10 +1,10 @@
 {
   "repository": "qbittorrent/qBittorrent",
-  "last_seen_tag": "release-5.2.3",
-  "webapi_version": "2.15.1",
+  "last_seen_tag": "release-5.3.0",
+  "webapi_version": "2.16.2",
   "ui_hashes": {
-    "mainwindow.ui": "da9c9ea753246c0b73d710edff4c0e393618e4f7bdcc7aff5267455c9c2b8b35",
-    "addnewtorrentdialog.ui": "da25fb2f3c67b714bd154c0d29b3a12b940b149cede6a69b690c49e0b5eb0ef9",
+    "mainwindow.ui": "9a4facac082940ed4da9ec24c565e9b6497db8915dc0e2e66e249bdaa3196f0c",
+    "addnewtorrentdialog.ui": "8269e901f70c7028328197ba269b034e62574f5622ddc23b42b5578aa1df8276",
     "propertieswidget.ui": "38613de719ca8ffda89c183d53d9dcad36942fc3056f33fa4c0ae7dc224b4d6f"
   },
   "controllers": {
@@ -14,6 +14,7 @@
       "defaultSavePath",
       "deleteAPIKey",
       "getDirectoryContent",
+      "getFreeSpaceAtPath",
       "networkInterfaceAddressList",
       "networkInterfaceList",
       "preferences",
@@ -29,8 +30,12 @@
     "transfer": [
       "banPeers",
       "downloadLimit",
+      "getSpeedLimits",
       "info",
+      "pauseSession",
+      "resumeSession",
       "setDownloadLimit",
+      "setSpeedLimits",
       "setSpeedLimitsMode",
       "setUploadLimit",
       "speedLimitsMode",
@@ -56,6 +61,7 @@
       "decreasePrio",
       "delete",
       "deleteTags",
+      "downloadFile",
       "downloadLimit",
       "editCategory",
       "editTracker",
