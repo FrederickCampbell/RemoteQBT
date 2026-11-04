@@ -259,6 +259,18 @@ class AddTorrentDialog(QDialog):
             self.share_action.addItem(label, data)
         af.addRow("When share limit reached:", self.share_action)
 
+        self.share_limits_mode = QComboBox()
+        for label, value in [
+            ("Use default", "Default"),
+            ("Match any limit", "MatchAny"),
+            ("Match all limits", "MatchAll"),
+        ]:
+            self.share_limits_mode.addItem(label, value)
+        mode_index = self.share_limits_mode.findData(self.prefs.get("share_limits_mode", "Default"))
+        if mode_index >= 0:
+            self.share_limits_mode.setCurrentIndex(mode_index)
+        af.addRow("Combine share limits:", self.share_limits_mode)
+
         self.seed_mode = QCheckBox("Skip hash check / seed mode (files already complete)")
         af.addRow("", self.seed_mode)
         self.tabs.addTab(adv, "Advanced")
@@ -324,9 +336,7 @@ class AddTorrentDialog(QDialog):
             "sequentialDownload": self.sequential.isChecked(),
             "firstLastPiecePrio": self.first_last.isChecked(),
             "autoTMM": self.auto_tmm.isChecked(),
-            # 5.2.1 calls this skip_checking; newer API branches call it seedMode.
-            # Send both so one UI works across the 5.2.x family.
-            "skip_checking": self.seed_mode.isChecked(),
+            # QbtClient maps this to skip_checking on older servers.
             "seedMode": self.seed_mode.isChecked(),
             "upLimit": -1 if self.up_limit.value() == 0 else self.up_limit.value() * 1024,
             "dlLimit": -1 if self.dl_limit.value() == 0 else self.dl_limit.value() * 1024,
@@ -334,6 +344,7 @@ class AddTorrentDialog(QDialog):
             "seedingTimeLimit": self._seed_time(),
             "inactiveSeedingTimeLimit": -2,
             "shareLimitAction": self.share_action.currentData(),
+            "shareLimitsMode": self.share_limits_mode.currentData(),
             "stopCondition": self.stop_condition.currentData(),
         }
         layout = self.content_layout.currentData()
@@ -486,7 +497,7 @@ class TorrentLimitsDialog(QDialog):
 
 
 class ShareLimitsDialog(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, mode: str = "Default"):
         super().__init__(parent)
         self.setWindowTitle("Share Ratio Limiting")
         root = QFormLayout(self)
@@ -500,11 +511,22 @@ class ShareLimitsDialog(QDialog):
         root.addRow("Seeding time:", self.time)
         root.addRow("Inactive seeding time:", self.inactive)
         root.addRow("Action:", self.action)
+        self.mode = QComboBox()
+        for label, value in [
+            ("Use default", "Default"),
+            ("Match any limit", "MatchAny"),
+            ("Match all limits", "MatchAll"),
+        ]:
+            self.mode.addItem(label, value)
+        mode_index = self.mode.findData(mode)
+        if mode_index >= 0:
+            self.mode.setCurrentIndex(mode_index)
+        root.addRow("Combine share limits:", self.mode)
         bb = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         bb.accepted.connect(self.accept); bb.rejected.connect(self.reject); root.addRow(bb)
 
     def values(self):
-        return self.ratio.value(), self.time.value(), self.inactive.value(), self.action.currentData()
+        return self.ratio.value(), self.time.value(), self.inactive.value(), self.action.currentData(), self.mode.currentData()
 
 
 def _multiline_text_dialog(parent, title: str, label: str, initial: str = "") -> tuple[str, bool]:
