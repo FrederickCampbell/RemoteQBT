@@ -23,6 +23,7 @@ class QbtClient:
         self.key = str(cfg.get("api_key", ""))
         self.save_path = str(cfg.get("save_path", ""))
         self.user_agent = f"RemoteQBT/{RELEASE_TAG}"
+        self._webapi_tuple: tuple[int, int, int] | None = None
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -114,6 +115,16 @@ class QbtClient:
     def webapi_version(self) -> str:
         return self._get_text("/api/v2/app/webapiVersion")
 
+    def _api_at_least(self, major: int, minor: int, patch: int = 0) -> bool:
+        """Resolve the connected server's API version once."""
+        if self._webapi_tuple is None:
+            version = self.webapi_version().strip()
+            match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", version)
+            if not match:
+                raise QbtApiError(f"Unrecognized qBittorrent Web API version: {version!r}")
+            self._webapi_tuple = tuple(map(int, match.groups()))
+        return self._webapi_tuple >= (major, minor, patch)
+
     def build_info(self) -> dict[str, Any]:
         return self._get_json("/api/v2/app/buildInfo") or {}
 
@@ -158,10 +169,16 @@ class QbtClient:
         return self._get_json("/api/v2/transfer/info") or {}
 
     def speed_limits(self) -> dict[str, int]:
-        # qBittorrent 5.2.1 (Web API 2.15.1) exposes normal limits through the
-        # individual transfer endpoints and alternative limits through app prefs.
-        # Newer qBittorrent builds have a combined endpoint, but this form works on
-        # the user's 5.2.1 server and remains forward-compatible.
+        if self._api_at_least(2, 16, 0):
+            data = self._get_json("/api/v2/transfer/getSpeedLimits")
+            if not isinstance(data, dict):
+                raise QbtApiError("Invalid response from getSpeedLimits")
+            keys = ("up_limit", "dl_limit", "alt_up_limit", "alt_dl_limit")
+            try:
+                return {key: int(data[key]) for key in keys}
+            except (KeyError, ValueError, TypeError) as exc:
+                raise QbtApiError("Incomplete response from getSpeedLimits") from exc
+        # Older API: combine the individual endpoints and preference values.
         try:
             up = int(self._get_text("/api/v2/transfer/uploadLimit") or 0)
         except Exception:
@@ -179,6 +196,11 @@ class QbtClient:
         }
 
     def set_speed_limits(self, up_limit: int, dl_limit: int, alt_up_limit: int, alt_dl_limit: int) -> Any:
+        if self._api_at_least(2, 16, 0):
+            return self._post_form("/api/v2/transfer/setSpeedLimits", {
+                "up_limit": up_limit, "dl_limit": dl_limit,
+                "alt_up_limit": alt_up_limit, "alt_dl_limit": alt_dl_limit,
+            })
         self._post_form("/api/v2/transfer/setUploadLimit", {"limit": up_limit})
         self._post_form("/api/v2/transfer/setDownloadLimit", {"limit": dl_limit})
         return self.set_preferences({"alt_up_limit": alt_up_limit, "alt_dl_limit": alt_dl_limit})
@@ -188,6 +210,16 @@ class QbtClient:
 
     def set_speed_limits_mode(self, enabled: bool) -> Any:
         return self._post_form("/api/v2/transfer/setSpeedLimitsMode", {"mode": 1 if enabled else 0})
+
+    def pause_session(self) -> Any:
+        if self._api_at_least(2, 16, 2):
+            return self._post_form("/api/v2/transfer/pauseSession")
+        return self.stop(["all"])
+
+    def resume_session(self) -> Any:
+        if self._api_at_least(2, 16, 2):
+            return self._post_form("/api/v2/transfer/resumeSession")
+        return self.start(["all"])
 
     def ban_peers(self, peers: Iterable[str]) -> Any:
         return self._post_form("/api/v2/transfer/banPeers", {"peers": "|".join(peers)})
@@ -328,14 +360,19 @@ class QbtClient:
         seeding_time_limit: int,
         inactive_seeding_time_limit: int,
         action: str,
+        share_limits_mode: str = "Default",
     ) -> Any:
-        return self.torrent_action(
-            "setShareLimits", hashes,
-            ratioLimit=ratio_limit,
-            seedingTimeLimit=seeding_time_limit,
-            inactiveSeedingTimeLimit=inactive_seeding_time_limit,
-            shareLimitAction=action,
-        )
+        if share_limits_mode not in {"Default", "MatchAny", "MatchAll"}:
+            raise ValueError(f"Unsupported share limits mode: {share_limits_mode}")
+        params = {
+            "ratioLimit": ratio_limit,
+            "seedingTimeLimit": seeding_time_limit,
+            "inactiveSeedingTimeLimit": inactive_seeding_time_limit,
+            "shareLimitAction": action,
+        }
+        if self._api_at_least(2, 15, 3):
+            params["shareLimitsMode"] = share_limits_mode
+        return self.torrent_action("setShareLimits", hashes, **params)
 
     # ---------- categories/tags ----------
     def create_category(self, name: str, save_path: str = "") -> Any:
@@ -429,6 +466,15 @@ class QbtClient:
         ]:
             if key in fields and isinstance(fields[key], bool):
                 fields[key] = to_bool_text(fields[key])
+
+        # The API renamed skip_checking to seedMode in version 2.16.0.
+        # Send only the wire format supported by the connected server.
+        if self._api_at_least(2, 16, 0):
+            fields.pop("skip_checking", None)
+        elif "seedMode" in fields:
+            fields["skip_checking"] = fields.pop("seedMode")
+        if not self._api_at_least(2, 15, 3):
+            fields.pop("shareLimitsMode", None)
 
         for source in sources:
             try:

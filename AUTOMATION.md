@@ -13,7 +13,7 @@ There is no independent RemoteQBT semantic-version line.
 
 The single source of shipped identity is `rqbt/version.py`.
 
-**Current compatibility baseline:** qBittorrent `5.2.3` / Web API `2.15.1`.
+**Current compatibility baseline:** qBittorrent `5.3.0` / Web API `2.16.2`.
 
 `scripts/release_identity.py` synchronizes the README, automation documentation, and `BUILD-MANIFEST.json`, and CI refuses stale identity/baseline documentation.
 
@@ -31,7 +31,7 @@ Safe updates do not retain transient compatibility-report files on `main`.
 
 ## Review-required upstream change
 
-New/removed Web API actions, Web API version changes, missing required endpoints, or mirrored desktop `.ui` changes create a bot PR + issue and stop.
+New/removed Web API actions, Web API version changes, missing required endpoints, or mirrored desktop `.ui` changes create a bot PR + issue and stop. Once a review PR exists, the watcher leaves its branch untouched so CI approvals and reviewer changes remain intact.
 
 The compatibility report exists only while that review is needed. After the reviewed adaptation is merged, release preparation removes the transient report, runs the same Windows CI gate, and publishes the qBittorrent-aligned release.
 

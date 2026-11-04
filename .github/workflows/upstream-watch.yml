@@ -118,20 +118,26 @@ jobs:
           slug="$(echo "$tag" | tr '/ ' '--')"
           branch="bot/qbittorrent-review-${slug}"
 
+          # A review branch belongs to the reviewer once opened. Rebuilding it
+          # every day invalidates approvals and can erase human fixes.
+          pr="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$pr" ]; then
+            echo "Review PR #$pr already exists; preserving its branch and CI."
+            echo "pr=$pr" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           git config user.name 'remoteqbt-upstream-bot'
           git config user.email 'actions@users.noreply.github.com'
           git checkout -B "$branch"
           git add assets upstream
           git commit -m "chore(upstream): audit qBittorrent $tag" || true
-          git push --force-with-lease origin "$branch"
+          git push origin "$branch"
 
-          pr="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --state open --json number --jq '.[0].number // empty')"
-          if [ -z "$pr" ]; then
-            url="$(gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$branch" \
-              --title "Review qBittorrent $tag compatibility" \
-              --body-file upstream/compatibility-report.md)"
-            pr="${url##*/}"
-          fi
+          url="$(gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$branch" \
+            --title "Review qBittorrent $tag compatibility" \
+            --body-file upstream/compatibility-report.md)"
+          pr="${url##*/}"
           echo "pr=$pr" >> "$GITHUB_OUTPUT"
 
       - name: Open/update compatibility issue
