@@ -462,6 +462,14 @@ class MainWindow(QMainWindow):
         self.status_msg.setText(f" {self.proxy.rowCount()} shown / {len(self.sync.torrents)} torrents · updated {time.strftime('%H:%M:%S')} ")
         qv = f"qBittorrent {self.version}" if self.version else "qBittorrent"
         self.setWindowTitle(f"RemoteQBT — {qv} on {self.remote_name()}   [D: {human_speed(dl)}, U: {human_speed(up)}]")
+        session_state = state.get("session_state")
+        if isinstance(session_state, bool):
+            self.act_pause_session.setEnabled(session_state)
+            self.act_resume_session.setEnabled(not session_state)
+        else:
+            # The legacy server state does not expose session_state.
+            self.act_pause_session.setEnabled(True)
+            self.act_resume_session.setEnabled(True)
         self.act_alt_speed.blockSignals(True); self.act_alt_speed.setChecked(bool(state.get("use_alt_speed_limits", False))); self.act_alt_speed.blockSignals(False)
 
     def set_live_sorting(self, checked: bool):
@@ -733,10 +741,10 @@ class MainWindow(QMainWindow):
         self.run_worker(fn, self._after_action, self.show_error)
 
     def session_action(self, action: str):
-        fn = self.client().start if action == "start" else self.client().stop
+        fn = self.client().resume_session if action == "start" else self.client().pause_session
         label = "resume" if action == "start" else "pause"
         self.status_msg.setText(f" Requesting session {label}… ")
-        self.run_worker(lambda: fn(["all"]), self._after_action, self.show_error)
+        self.run_worker(fn, self._after_action, self.show_error)
 
     def queue_action(self, where: str):
         hashes = self._selected_or_notice()
@@ -811,10 +819,12 @@ class MainWindow(QMainWindow):
     def set_share_limits(self):
         hashes = self._selected_or_notice()
         if not hashes: return
-        d = ShareLimitsDialog(self)
+        current = self.selected_torrent() if len(hashes) == 1 else None
+        mode = str((current or {}).get("share_limits_mode", "Default"))
+        d = ShareLimitsDialog(self, mode=mode)
         if d.exec() == QDialog.DialogCode.Accepted:
-            ratio, seed, inactive, action = d.values()
-            self.run_worker(lambda:self.client().set_share_limits(hashes, ratio, seed, inactive, action), self._after_action, self.show_error)
+            ratio, seed, inactive, action, limits_mode = d.values()
+            self.run_worker(lambda:self.client().set_share_limits(hashes, ratio, seed, inactive, action, limits_mode), self._after_action, self.show_error)
 
     def delete_selected(self):
         hashes = self._selected_or_notice()
