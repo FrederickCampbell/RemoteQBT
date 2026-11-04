@@ -1,6 +1,6 @@
-# RemoteQBT for qBittorrent 5.2.3
+# RemoteQBT for qBittorrent 5.3.0
 
-**Release identity:** `5.2.3-r3` · Git tag `qbt-5.2.3-r3`
+**Release identity:** `5.3.0-r1` · Git tag `qbt-5.3.0-r1`
 
 **Remote qBittorrent, controlled locally.**
 
@@ -16,7 +16,11 @@ RemoteQBT deliberately has **no independent major/minor/patch product version**.
 
 GitHub release tags use `qbt-X.Y.Z-rN`. The build manifest, Windows package name, Qt application version, updater comparison logic, README, installer banner, GitHub release title, and automation all derive from that same identity.
 
-Current audited upstream baseline: qBittorrent **5.2.3** (`release-5.2.3`), Web API **2.15.1**.
+Current audited upstream baseline: qBittorrent **5.3.0** (`release-5.3.0`), Web API **2.16.2**.
+
+## qBittorrent 5.3 compatibility
+
+The transfer client uses the server's Web API version to select the correct torrent-add seed-mode parameter, share-limit matching mode, speed-limit endpoints, and session pause/resume operations. Legacy Web API 2.15.1 behavior remains supported. These API contracts are covered by regression tests.
 
 ## Live transfer list
 

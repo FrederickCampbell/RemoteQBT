@@ -1,14 +1,14 @@
 {
   "name": "RemoteQBT",
-  "release_id": "5.2.3-r3",
-  "release_tag": "qbt-5.2.3-r3",
+  "release_id": "5.3.0-r1",
+  "release_tag": "qbt-5.3.0-r1",
   "qbittorrent_compatibility": {
-    "release": "5.2.3",
-    "upstream_tag": "release-5.2.3",
-    "webapi_version": "2.15.1"
+    "release": "5.3.0",
+    "upstream_tag": "release-5.3.0",
+    "webapi_version": "2.16.2"
   },
-  "remoteqbt_revision": 3,
-  "target": "Windows / qBittorrent 5.2.3 compatibility baseline",
+  "remoteqbt_revision": 1,
+  "target": "Windows / qBittorrent 5.3.0 compatibility baseline",
   "validated": {
     "python_syntax": true,
     "private_api_key_embedded": false,
